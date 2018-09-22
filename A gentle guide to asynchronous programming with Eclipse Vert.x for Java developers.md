@@ -68,3 +68,35 @@ Vert.x中的调度单元被称为 *Verticle*。Verticle 通过事件循环处理
 ![verticle-threading-config](./images/verticle-threading-config.png)
 
 传入的网络数据被接受线程接收，然后被作为事件传递给相应的 verticle。当 verticle 打开网络服务器并且被多次部署时，事件将以轮询的方式分发到 verticle 实例，这对于在大量并发网络请求的情况下最大化CPU使用率非常有用。最后，verticle 具有简单的开始/结束生命周期，verticle 可以部署其他的 verticle。
+
+#### 事件总线
+
+Verticles form technical units of deployments of code in Vert.x. The Vert.x event bus is the main tool for different verticles to communicate through asynchronous message passing. For instance suppose that we have a verticle for dealing with HTTP requests, and a verticle for managing access to the database. The event bus allows the HTTP verticle to send a request to the database verticle that performs a SQL query, and responds back to the HTTP verticle
+
+Verticle构成了 Vert.x 中代码部署的技术单元。Vert.x 事件总线是不同 verticle 通过异步传递消息进行通信的主要工具。例如，假设我们有一个用于处理 HTTP 请求的verticle，以及一个用于管理对数据库的访问的 verticle。事件总线允许 HTTP verticle向执行 SQL 查询的数据库 verticle 发送请求，并对 HTTP verticle作出响应：
+
+![event-bus](./images/event-bus.png)
+
+The event-bus allows passing any kind of data, although JSON is the preferred exchange format since it allows verticles written in different languages to communicate, and more generally JSON is a popular general-purpose semi-structured data marshaling text format.
+
+
+The event bus allows verticles to transparently communicate not just within the same JVM process: 
+- when network clustering is activated, the event bus is distributed so that messages can be sent to verticles running on other application nodes, 
+- the event-bus can be accessed through a simple TCP protocol for third-party applications to communicate, 
+- the event-bus can also be exposed over general-purpose messaging bridges (e.g, AMQP, Stomp),
+-  a SockJS bridge allows web applications to seamlessly communicate over the event bus from JavaScript running in the browser by receiving and publishing messages just like any verticle would do.
+
+事件总线允许传递任何类型的数据，尽管 JSON 是首选的交换格式，因为它允许以不同语言编写的 verticle 进行通信，更通俗地说，JSON 是一种流行的通用半结构化数据交换文本格式。
+
+消息可以发送到自由格式字符串的目的地。事件总线支持以下通信模式：
+
+1. 点对点消息
+2. 请求-响应消息
+3. 发布/订阅广播消息。
+
+事件总线允许Verticle不仅在同一JVM进程内透明地进行通信：
+
+- 当网络集群被激活时，事件总线是分布式的，这样消息便可以被发送到在其他应用程序节点上运行的 verticle
+- 可以通过简单的 TCP 协议访问事件总线，以便与第三方应用程序进行通信
+- 事件总线也可以通过通用的消息桥接器（例如，AMQP，Stomp）暴露
+- 通过浏览器上运行的JavaScript中的事件总线，SockJS 桥接器允许 Web 应用程序通过接收和发布消息无缝地进行通信，就像其他 verticle 一样。
