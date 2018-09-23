@@ -82,8 +82,9 @@ Vert.x JDBC 客户端库提供对任何 兼容 JDBC 的数据库的访问，但�
 HSQLDB 作为嵌入式数据库非常适合我们入门。它将数据存储在本地文件中，并且由于 HSQLDB 库Jar包提供了 JDBC 驱动程序，因此 Vert.x  的 JDBC 配置将非常简单。
 
 **NOTE**
-> Vert.x 同样提供专用的 MySQL 和 PostgreSQL(href="http://vertx.io/docs/vertx-mysql-postgresql-client/java/") 客户端库。
+> Vert.x 同样提供专用的 [MySQL 和 PostgreSQL]("http://vertx.io/docs/vertx-mysql-postgresql-client/java/") 客户端库。
 
 > 当然，您可以使用通用的 Vert.x JDBC 客户端连接到 MySQL 或       PostgreSQL 数据库，但这些库通过使用这两个数据库的服务器网络协议而不是通过（阻塞）JDBC API 来提供更好的性能。
 
 >Vert.x 还提供了处理流行的非关系型数据库 [MongoDB](href="http://vertx.io/docs/vertx-mongo-client/java/") 和 [Redis](href="http://vertx.io/docs/vertx-redis-client/java/") 的库。庞大的社区提供了与 Apache Cassandra，OrientDB 或 ElasticSearch 等其他存储系统的集成。
+
