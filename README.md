@@ -1,9 +1,4 @@
-# Java开发者使用 Eclipse Vert.x 进行异步编程的简要指南
-
-*致谢*
- 
-本文档收到了来自 Arnaud Esteve，Marc Paquette，Ashley Bye，Ger-Jan te Dorsthorst，Htet Aung Shine 等人的贡献。
-
+# Eclipse Vert.x 异步编程 Java 开发简要指南
 
 link https://vertx.io/docs/guide-for-java-devs/
 
