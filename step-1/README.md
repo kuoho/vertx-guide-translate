@@ -130,4 +130,76 @@ Vert.x 核心 API 基于异步事件通知的回调。有经验的开发人员�
 
 虽然核心 API 本来可以设计成支持 promises 和 futures，但选择回调实际上很有意思，因为它允许使用不同的编程抽象。Vert.x 基本上是一个不带有偏向的项目，回调允许不同模型的实现来更好地应对异步编程：反应式扩展（通过 RxJava）， promises 和 futures，fibers （使用 bytecode instrumentation）等等。
 
-虽然所有的 Vert.x API 在其他抽象（如RxJava）被利用之前都是面向回调的，但本指南在第一部分中只会使用回调，以确保读者熟悉 Vert.x 中的核心概念。从回调作为开始，来区分异步代码的各部分也可以说更容易。一旦在示例代码中，回调明显不会使得代码变得易于阅读的时，我们将引入 RxJava 的支持，用以展示如何通过以处理事件流的方式进行思考，来更好地表达相同的异步代码。
+虽然所有的 Vert.x API 在其他抽象（如RxJava）被利用之前都是面向回调的，但本指南在第一部分中只会使用回调，以确保读者熟悉 Vert.x 中的核心概念。从回调作为开始，来区分异步代码的各部分也可以说更容易。一旦在示例代码中，回调明显不会使得代码变得易于阅读的时，我们将引入 RxJava 的支持，用以展示如何通过以处理事件流的方式进行思考，来更好地表示相同的异步代码。
+
+### Wiki verticle 初始化阶段
+
+为了让我们的 wiki 应用运行，我们需要执行两个阶段的初始化：
+1. 我们需要建立一个 JDBC 数据库连接，并确保数据库模式到位
+2. 并且我们需要为 Web 应用启动一个 HTTP 服务器。
+
+每个阶段都可能会失败（例如，HTTP 服务器 TCP 端口已经被占用），而且它们不应该并行运行，因为 Web 应用程序代码首先需要能正常访问数据库。
+
+为了使我们的代码更清晰，我们将为每个阶段定义1个方法，并采用返回 *future / promise* 对象来通知每个阶段的完成，以及是否成功的模式：
+
+	private Future<Void> prepareDatabase() {
+	  Future<Void> future = Future.future();
+	  // (...)
+	  return future;
+	}
+	
+	private Future<Void> startHttpServer() {
+	  Future<Void> future = Future.future();
+	  // (...)
+	  return future;
+	}
+
+通过让每个方法返回一个*future*对象，start 方法的实现变成了方法组合：
+
+	@Override
+	public void start(Future<Void> startFuture) throws Exception {
+	  Future<Void> steps = prepareDatabase().compose(v -> startHttpServer());
+	  steps.setHandler(startFuture.completer());
+	}
+
+当 `prepareDatabase` 的 *future* 成功完成时，将调用 `startHttpServer`， future 对象 `steps` 依赖于`startHttpServer` 返回的 future 的结果。如果 `prepareDatabase` 遇到错误，则 `startHttpServer` 永远不会被调用，在这种情况下，`steps` 处于fail状态，会有一个描述错误的异常并完成。
+
+最后 `steps` 完成：`setHandler`定义了一个在完成时被调用的处理程序。在我们的例子中，我们只想用 `steps` 完成 `startFuture` ,并使用 `completer` 方法来获取一个handler。这相当于：
+
+	Future<Void> steps = prepareDatabase().compose(v -> startHttpServer());
+	steps.setHandler(ar -> {  ①
+	  if (ar.succeeded()) {
+	    startFuture.complete();
+	  } else {
+	    startFuture.fail(ar.cause());
+	  }
+	});
+
+①`ar`的类型是 `AsyncResult <Void>`。`AsyncResult <T>` 用于传递异步处理的结果，并且可以在成功时产生`T`类型的值，或者在处理失败时产生失败的异常。
+
+#### 数据库初始化
+
+wiki 应用数据库结构由包含以下列的一个单表 `Pages` 组成：
+
+|Column|Type      |Description|
+|------|----------|-----------|
+|`Id`  |Integer   |Primary key|
+|`Name`|Characters|Name of a wiki page, must be unique|
+|`Content`|Text   |Markdown text of a wiki page|
+
+数据库操作将是典型的创建，读取，更新，删除操作。为了让我们开始，我们将相应的SQL查询简单存储为MainVerticle类的静态字段。请注意，它们是用HSQLDB理解的SQL方言编写的，但其他关系数据库可能不一定支持：
+
+    private static final String SQL_CREATE_PAGES_TABLE = "create table if not exists Pages (Id integer identity primary key, Name varchar(255) unique, Content clob)";
+	private static final String SQL_GET_PAGE = "select Id, Content from Pages where Name = ?"; (1)
+	private static final String SQL_CREATE_PAGE = "insert into Pages values (NULL, ?, ?)";
+	private static final String SQL_SAVE_PAGE = "update Pages set Content = ? where Id = ?";
+	private static final String SQL_ALL_PAGES = "select Name from Pages";
+	private static final String SQL_DELETE_PAGE = "delete from Pages where Id = ?";
+
+>1.在查询语句中`?`是占位符，在执行查询时传递数据，Vert.x JDBC 客户端会阻止 SQL 注入。
+
+应用程序的 verticle 需要持有作为数据库连接服务的 `JDBCClient` 对象（来自 `io.vertx.ext.jdbc	` 包）的引用。我们使用`MainVerticle`中的一个字段来实现，我们还从 org.slf4j 包创建了一个通用记录器：
+
+	private JDBCClient dbClient;
+
+	private static final Logger LOGGER = LoggerFactory.getLogger(MainVerticle.class);

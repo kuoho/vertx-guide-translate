@@ -1,13 +1,13 @@
 <component name="libraryTable">
   <library name="Maven: io.vertx:vertx-unit:3.5.2">
     <CLASSES>
-      <root url="jar://E:/environment/.m2/repositoory/io/vertx/vertx-unit/3.5.2/vertx-unit-3.5.2.jar!/" />
+      <root url="jar://$MAVEN_REPOSITORY$/io/vertx/vertx-unit/3.5.2/vertx-unit-3.5.2.jar!/" />
     </CLASSES>
     <JAVADOC>
-      <root url="jar://E:/environment/.m2/repositoory/io/vertx/vertx-unit/3.5.2/vertx-unit-3.5.2-javadoc.jar!/" />
+      <root url="jar://$MAVEN_REPOSITORY$/io/vertx/vertx-unit/3.5.2/vertx-unit-3.5.2-javadoc.jar!/" />
     </JAVADOC>
     <SOURCES>
-      <root url="jar://E:/environment/.m2/repositoory/io/vertx/vertx-unit/3.5.2/vertx-unit-3.5.2-sources.jar!/" />
+      <root url="jar://$MAVEN_REPOSITORY$/io/vertx/vertx-unit/3.5.2/vertx-unit-3.5.2-sources.jar!/" />
     </SOURCES>
   </library>
 </component>
