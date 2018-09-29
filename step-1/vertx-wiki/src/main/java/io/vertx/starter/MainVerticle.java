@@ -2,18 +2,19 @@ package io.vertx.starter;
 
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
-import io.vertx.core.Handler;
 import io.vertx.core.http.HttpServer;
-import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.jdbc.JDBCClient;
 import io.vertx.ext.sql.SQLConnection;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
-import io.vertx.ext.web.impl.RouterImpl;
+import io.vertx.ext.web.templ.FreeMarkerTemplateEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class MainVerticle extends AbstractVerticle {
 
@@ -26,6 +27,7 @@ public class MainVerticle extends AbstractVerticle {
   private static final String SQL_SAVE_PAGE = "update Pages set Content = ? where Id = ?";
   private static final String SQL_ALL_PAGES = "select Name from Pages";
   private static final String SQL_DELETE_PAGE = "delete from Pages where Id = ?";
+  private final FreeMarkerTemplateEngine engine = FreeMarkerTemplateEngine.create();
 
 //  @Override
 //  public void start() {
@@ -82,17 +84,58 @@ public class MainVerticle extends AbstractVerticle {
 
     Router router = Router.router(vertx);
     router.post().handler(BodyHandler.create());
-//    router.get().handler();
-     server.requestHandler(router::accept).listen(8080, ar -> {
-       if (ar.succeeded()) {
-         LOGGER.info("HTTP server running on port 8080");
-         future.complete();
-       } else {
-         LOGGER.error("Could not start a HTTP server", ar.cause());
-         future.fail(ar.cause());
-       }
-     });
+    router.get("/").handler(routingContext -> {
+      routingContext.response().end("asdadsadsadadsda");
+    });
+//    router.get("/").handler(this::indexPageHandler);
+    server.requestHandler(router::accept).listen(8080, ar -> {
+      if (ar.succeeded()) {
+        LOGGER.info("HTTP server running on port 8080");
+        future.complete();
+      } else {
+        LOGGER.error("Could not start a HTTP server", ar.cause());
+        future.fail(ar.cause());
+      }
+    });
     return future;
+  }
+
+  private void indexPageHandler(RoutingContext context) {
+    dbClient.getConnection(car -> {
+      if (car.succeeded()) {
+        SQLConnection connection = car.result();
+        connection.query(SQL_ALL_PAGES, res -> {
+          connection.close();
+
+          if (res.succeeded()) {
+            List<String> pages = res.result()
+              .getResults()
+              .stream()
+              .map(json -> json.getString(0))
+              .sorted()
+              .collect(Collectors.toList());
+
+            context.put("title", "Wiki home");
+            context.put("pages", pages);
+
+            engine.render(context, "templates", "/index.ftl", ar -> {
+              if (ar.succeeded()) {
+                context.response().putHeader("Content-Type", "text/html");
+                context.response().end(ar.result());
+              } else {
+                context.fail(ar.cause());
+              }
+            });
+
+
+          } else {
+            context.fail(res.cause());
+          }
+        });
+      } else {
+        context.fail(car.cause());
+      }
+    });
   }
 
 }

@@ -61,7 +61,7 @@ Vert.x 社区提供了可以克隆的项目模板结构 [https://github.com/vert
 	</dependency>
 
 **TIP**
-正如 `vertx-web-templ-freemarker` 名称所示，Vert.x web 为流行的模板引擎都提供了可插拔的支持：Handlebars，Jade，MVEL，Pebble，Thymeleaf，当然还有 Freemarker。
+>正如 `vertx-web-templ-freemarker` 名称所示，Vert.x web 为流行的模板引擎都提供了可插拔的支持：Handlebars，Jade，MVEL，Pebble，Thymeleaf，当然还有 Freemarker。
 
 第二组依赖项是 JDBC 数据库访问所需的依赖项：
 
@@ -321,3 +321,94 @@ HTTP 服务器利用`vertx-web`项目轻松的为 HTTP 请求定义*分发路由
 4. 这使得所有 HTTP POST 请求都首先通过一个 handler，在这里是`io.vertx.ext.web.handler.BodyHandler`。该 handler 根据 HTTP 请求（例如，表单提交）自动解码 body，然后可以将其作为 Vert.x 缓冲区对象进行操作。
 5. 路由器 router 对象可以用作HTTP 服务器 handler，然后将其分发给上面定义的其他handlers。
 6. 启动 HTTP 服务器是异步操作，因此需要检查`AsyncResult <HttpServer>`是否成功。顺便说一句，`8080`参数指定了服务器使用的 TCP 端口。
+
+### HTTP 路由器 handlers
+
+`startHttpServer`方法的 HTTP router 实例基于 URL 模式和 HTTP 方法指向不同的handlers。每个 handler 处理 一个 HTTP 请求，执行数据库查询，然后使用 FreeMarker 模板渲染 HTML 页面。
+
+#### Index 页面 handler
+
+index 页面提供了所有 wiki 词条指针的列表以及用于创建新条目的区域：
+![index.png](images/index.png)
+该实现是一个简单的`select *`SQL 查询，然后将数据传递给 FreeMarker 模版引擎以渲染 HTML 响应。
+
+`indexHandler`方法代码如下：
+
+	private final FreeMarkerTemplateEngine templateEngine = FreeMarkerTemplateEngine.create();
+
+	private void indexHandler(RoutingContext context) {
+	  dbClient.getConnection(car -> {
+	    if (car.succeeded()) {
+	      SQLConnection connection = car.result();
+	      connection.query(SQL_ALL_PAGES, res -> {
+	        connection.close();
+	
+	        if (res.succeeded()) {
+	          List<String> pages = res.result() (1)
+	            .getResults()
+	            .stream()
+	            .map(json -> json.getString(0))
+	            .sorted()
+	            .collect(Collectors.toList());
+	
+	          context.put("title", "Wiki home");  (2)
+	          context.put("pages", pages);
+	          templateEngine.render(context, "templates", "/index.ftl", ar -> {   (3)
+	            if (ar.succeeded()) {
+	              context.response().putHeader("Content-Type", "text/html");
+	              context.response().end(ar.result());  (4)
+	            } else {
+	              context.fail(ar.cause());
+	            }
+	          });
+	
+	        } else {
+	          context.fail(res.cause());  (5)
+	        }
+	      });
+	    } else {
+	      context.fail(car.cause());
+	    }
+	  });
+	}
+
+1. SQL 查询结果作为`JsonArray`和`JsonObject`的实例返回。
+2. `RoutingContext`实例可用于放置任意键值对数据，随后可从模板或链式路由器 handlers 获得。
+3. 渲染模板是异步操作，我们使用通常的`AsyncResult`处理模式来处理它。
+4. `AsyncResult`在成功的情况下包含渲染为`String`的模板，我们可以使用该值结束 HTTP 响应流。
+5. 如果失败，`RoutingContext`的`fail`方法提供了合理的方法，将 HTTP 500 错误返回给 HTTP 客户端。
+
+FreeMarker 模板应该放在`src/main/resources/templates`文件夹中。`index.ftl`模板代码如下：
+
+	<#include "header.ftl">
+	
+	<div class="row">
+	
+	  <div class="col-md-12 mt-1">
+	    <div class="float-xs-right">
+	      <form class="form-inline" action="/create" method="post">
+	        <div class="form-group">
+	          <input type="text" class="form-control" id="name" name="name" placeholder="New page name">
+	        </div>
+	        <button type="submit" class="btn btn-primary">Create</button>
+	      </form>
+	    </div>
+	    <h1 class="display-4">${context.title}</h1>
+	  </div>
+	
+	  <div class="col-md-12 mt-1">
+	  <#list context.pages>
+	    <h2>Pages:</h2>
+	    <ul>
+	      <#items as page>
+	        <li><a href="/wiki/${page}">${page}</a></li>
+	      </#items>
+	    </ul>
+	  <#else>
+	    <p>The wiki is currently empty!</p>
+	  </#list>
+	  </div>
+	
+	</div>
+	
+	<#include "footer.ftl">
