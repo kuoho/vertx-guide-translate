@@ -198,8 +198,86 @@ wiki 应用数据库结构由包含以下列的一个单表 `Pages` 组成：
 
 >1.在查询语句中`?`是占位符，在执行查询时传递数据，Vert.x JDBC 客户端会阻止 SQL 注入。
 
-应用程序的 verticle 需要持有作为数据库连接服务的 `JDBCClient` 对象（来自 `io.vertx.ext.jdbc	` 包）的引用。我们使用`MainVerticle`中的一个字段来实现，我们还从 org.slf4j 包创建了一个通用记录器：
+应用程序的 verticle 需要持有作为数据库连接服务的`JDBCClient`对象（来自`io.vertx.ext.jdbc`包）的引用。我们使用`MainVerticle`中的一个字段来实现，我们还从 org.slf4j 包创建了一个通用记录器：
 
 	private JDBCClient dbClient;
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(MainVerticle.class);
+
+最后，这是`prepareDatabase`方法的完整实现。它尝试获取 JDBC 客户端连接，然后执行 SQL 查询语句以创建`Pages`表，除非它已经存在：
+
+	private Future<Void> prepareDatabase() {
+	  Future<Void> future = Future.future();
+	
+	  dbClient = JDBCClient.createShared(vertx, new JsonObject()  (1)
+	    .put("url", "jdbc:hsqldb:file:db/wiki")   (2)
+	    .put("driver_class", "org.hsqldb.jdbcDriver")   (3)
+	    .put("max_pool_size", 30));   (4)
+	
+	  dbClient.getConnection(ar -> {    (5)
+	    if (ar.failed()) {
+	      LOGGER.error("Could not open a database connection", ar.cause());
+	      future.fail(ar.cause());    (6)
+	    } else {
+	      SQLConnection connection = ar.result();   (7)
+	      connection.execute(SQL_CREATE_PAGES_TABLE, create -> {
+	        connection.close();   (8)
+	        if (create.failed()) {
+	          LOGGER.error("Database preparation error", create.cause());
+	          future.fail(create.cause());
+	        } else {
+	          future.complete();  (9)
+	        }
+	      });
+	    }
+	  });
+	
+	  return future;
+	}
+
+1. `createShared`创建了一个共享连接，可以在 `vertx` 实例已知的verticle 之间共享，这通常是一件好事。
+2. JDBC 客户端连接是通过传递一个 Vert.x JSON 对象完成的。这里`url`是JDBC URL。
+3. 就像`url`一样，`driver_class` 指定正在使用的 JDBC 驱动程序并指向驱动程序类。
+4. `max_pool_size`是并发连接数。我们在这里选择了30，它只是一个随意数字。
+5. 获取连接是一个异步操作，它给我们提供了`AsyncResult <SQLConnection>`。必须对其进行测试以确定是否可以建立连接（`AsyncResult`实际上是`Future`的 super-interface）。 
+6. 如果无法获得SQL连接，*future* 通过`fail`方法完成，`AsyncResult` 通过`cause`方法提供了失败的异常原因。
+7. `SQLConnection`是成功的`AsyncResult`返回的结果。我们可以用它来执行 SQL 查询。
+8. 在检查 SQL 查询是否成功之前，我们必须通过调用`close`来释放它，否则JDBC客户端连接池最终会耗尽。
+9. 我们通过调用*future*对象的 success 方法完成了 `prepareDatabase`。
+
+**TIP**
+>Vert.x 项目支持的SQL数据库模块目前不提供通过 SQL 查询之外的任何内容（例如，对象关系映射器），因为它们专注于提供对数据库的异步访问。但是，没有任何禁止使用[来自社区的更高级模块](https://github.com/vert-x3/vertx-awesome)，我们特别推荐尝试下像[this jOOq generator for Vert.x](https://github.com/jklingsporn/vertx-jooq)或者[this POJO mapper](https://github.com/BraintagsGmbH/vertx-pojo-mapper)等项目。
+
+#### 关于日志
+前一小节引入了一个 logger，我们选择了[SLF4J](https://www.slf4j.org/)库。Vert.x在日志记录方面也是自由的，不会倾向于某一特定的库：您可以选择任何流行的 Java 日志库。我们推荐 SLF4J，因为它是 Java 生态系统中流行的日志记录抽象和统一库。
+
+我们同时也推荐使用[Logback](https://logback.qos.ch/)作为 logger 实现。可以通过添加两个依赖项来完成 SLF4J 和 Logback 的集成，或者只是添加 logback-classic，它同时添加这两个库的依赖（顺便说一下，它们来自同一个作者）：
+
+	<dependency>
+	  <groupId>ch.qos.logback</groupId>
+	  <artifactId>logback-classic</artifactId>
+	  <version>1.2.3</version>
+	</dependency>
+
+默认情况下，SLF4J 会向控制台输出来自 Vert.x, Netty, C3PO 和 wiki 应用的许多日志事件。我们可以通过添加`src/main/resources/logback.xml`配置文件来减少不必要的冗余信息（有关详细信息，请参阅[https://logback.qos.ch/](https://logback.qos.ch/)）：
+
+	<configuration>
+
+	  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+	    <encoder>
+	      <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+	    </encoder>
+	  </appender>
+	
+	  <logger name="com.mchange.v2" level="warn"/>
+	  <logger name="io.netty" level="warn"/>
+	  <logger name="io.vertx" level="info"/>
+	  <logger name="io.vertx.guides.wiki" level="debug"/>
+	
+	  <root level="debug">
+	    <appender-ref ref="STDOUT"/>
+	  </root>
+	
+	</configuration>
+
+最后，HSQLDB 作为嵌入数据库时与 logger 不能集成地不是很好。默认情况下，它会尝试重新配置日志记录系统，因此我们需要禁用它，通过在启动应用时将`-Dhsqldb.reconfig_logging = false`属性传给 Java 虚拟机。
