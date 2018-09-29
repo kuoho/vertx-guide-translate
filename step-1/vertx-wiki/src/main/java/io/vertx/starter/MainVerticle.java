@@ -2,9 +2,16 @@ package io.vertx.starter;
 
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
+import io.vertx.core.Handler;
+import io.vertx.core.http.HttpServer;
+import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.jdbc.JDBCClient;
 import io.vertx.ext.sql.SQLConnection;
+import io.vertx.ext.web.Router;
+import io.vertx.ext.web.RoutingContext;
+import io.vertx.ext.web.handler.BodyHandler;
+import io.vertx.ext.web.impl.RouterImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,8 +30,8 @@ public class MainVerticle extends AbstractVerticle {
 //  @Override
 //  public void start() {
 //    vertx.createHttpServer()
-//        .requestHandler(req -> req.response().end("Hello Vert.x!"))
-//        .listen(8080);
+//      .requestHandler(req -> req.response().end("Hello Vert.x!"))
+//      .listen(8080);
 //  }
 
 
@@ -47,6 +54,7 @@ public class MainVerticle extends AbstractVerticle {
       .put("url", "jdbc:hsqldb:file:db/wiki")
       .put("driver_class", "org.hsqldb.jdbcDriver")
       .put("max_pool_size", 30));
+
     dbClient.getConnection(ar -> {
       if (ar.failed()) {
         LOGGER.error("Could not open a database connection", ar.cause());
@@ -54,11 +62,12 @@ public class MainVerticle extends AbstractVerticle {
       } else {
         SQLConnection connection = ar.result();
         connection.execute(SQL_CREATE_PAGES_TABLE, create -> {
+          connection.close();
           if (create.failed()) {
             LOGGER.error("Database preparation error", create.cause());
             future.fail(create.cause());
           } else {
-            future.completer();
+            future.complete();
           }
         });
       }
@@ -66,12 +75,24 @@ public class MainVerticle extends AbstractVerticle {
     return future;
   }
 
+
   private Future<Void> startHttpServer() {
     Future<Void> future = Future.future();
-    // ...
+    HttpServer server = vertx.createHttpServer();
+
+    Router router = Router.router(vertx);
+    router.post().handler(BodyHandler.create());
+//    router.get().handler();
+     server.requestHandler(router::accept).listen(8080, ar -> {
+       if (ar.succeeded()) {
+         LOGGER.info("HTTP server running on port 8080");
+         future.complete();
+       } else {
+         LOGGER.error("Could not start a HTTP server", ar.cause());
+         future.fail(ar.cause());
+       }
+     });
     return future;
-
   }
-
 
 }

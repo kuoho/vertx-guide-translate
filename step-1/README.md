@@ -281,3 +281,43 @@ wiki 应用数据库结构由包含以下列的一个单表 `Pages` 组成：
 	</configuration>
 
 最后，HSQLDB 作为嵌入数据库时与 logger 不能集成地不是很好。默认情况下，它会尝试重新配置日志记录系统，因此我们需要禁用它，通过在启动应用时将`-Dhsqldb.reconfig_logging = false`属性传给 Java 虚拟机。
+
+#### HTTP 服务器初始化
+
+HTTP 服务器利用`vertx-web`项目轻松的为 HTTP 请求定义*分发路由(dispatching routes)*。实际上，Vert.x core API 允许启动 HTTP 服务器并监听传入的连接，但它不提供任何方便的工具，例如，根据不同的请求 URl或者处理不同的请求 body 使用不同的 handles。这是路由器的作用，因为它根据 URL, HTTP 方法等将请求分发给不同的processing handlers。
+
+初始化包括设置*请求路由器(request router)*，然后启动HTTP服务器：
+
+	private Future<Void> startHttpServer() {
+	  Future<Void> future = Future.future();
+	  HttpServer server = vertx.createHttpServer();   (1)
+	
+	  Router router = Router.router(vertx);   (2)
+	  router.get("/").handler(this::indexHandler);
+	  router.get("/wiki/:page").handler(this::pageRenderingHandler); (3)
+	  router.post().handler(BodyHandler.create());  (4)
+	  router.post("/save").handler(this::pageUpdateHandler);
+	  router.post("/create").handler(this::pageCreateHandler);
+	  router.post("/delete").handler(this::pageDeletionHandler);
+	
+	  server
+	    .requestHandler(router::accept)   (5)
+	    .listen(8080, ar -> {   (6)
+	      if (ar.succeeded()) {
+	        LOGGER.info("HTTP server running on port 8080");
+	        future.complete();
+	      } else {
+	        LOGGER.error("Could not start a HTTP server", ar.cause());
+	        future.fail(ar.cause());
+	      }
+	    });
+	
+	  return future;
+	}
+
+1. `vertx`上下文对象提供了方法创建 HTTP 服务器，客户端，TCP/UDP 服务器和客户端等。 
+2. `Router`类来自`vertx-web`:`io.vertx.ext.web.Router`。
+3. 路由器有自己的handlers，可以通过 URL 和 HTTP方法 组合或者单独定义。对于简短的handlers，Java lambda 表达式是可以的选项，但对于更加复杂的 handlers，最好定义一个私有方法。请注意，URL 可以是参数化的：`/wiki/:page`将匹配`/wiki/Hello`之类的请求，在这种情况下，`page`参数将是可用的，它的值为`Hello`。
+4. 这使得所有 HTTP POST 请求都首先通过一个 handler，在这里是`io.vertx.ext.web.handler.BodyHandler`。该 handler 根据 HTTP 请求（例如，表单提交）自动解码 body，然后可以将其作为 Vert.x 缓冲区对象进行操作。
+5. 路由器 router 对象可以用作HTTP 服务器 handler，然后将其分发给上面定义的其他handlers。
+6. 启动 HTTP 服务器是异步操作，因此需要检查`AsyncResult <HttpServer>`是否成功。顺便说一句，`8080`参数指定了服务器使用的 TCP 端口。
