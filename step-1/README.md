@@ -412,3 +412,201 @@ FreeMarker 模板应该放在`src/main/resources/templates`文件夹中。`index
 	</div>
 	
 	<#include "footer.ftl">
+
+存储在`RoutingContext`对象中的键/值对数据可通过FreeMarker上下文变量获得。
+
+因为许多模板都有共同的 headers 和 footers，我们提取了下面的代码到`header.ftl`和`footer.ftl`中：
+
+**`header.ftl`**
+
+	<!DOCTYPE html>
+	<html lang="en">
+	<head>
+	  <meta charset="utf-8">
+	  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+	  <meta http-equiv="x-ua-compatible" content="ie=edge">
+	  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-alpha.5/css/bootstrap.min.css"
+	        integrity="sha384-AysaV+vQoT3kOAXZkl02PThvDr8HYKPZhNT5h/CXfBThSRXQ6jW5DO2ekP5ViFdi" crossorigin="anonymous">
+	  <title>${context.title} | A Sample Vert.x-powered Wiki</title>
+	</head>
+	<body>
+
+	<div class="container">
+
+**`footer.ftl`**
+
+	</div> <!-- .container -->
+
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js" 	integrity="sha384-3ceskX3iaEnIogmQchP8opvBy3Mi7Ce34nWjpBIwVTHfGYWQS9jwHDVRnpKKHJg7" crossorigin="anonymous">
+	</script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/tether/1.3.7/js/tether.min.js" 
+		integrity="sha384-XTs3FgkjiBgo8qjEjBk0tGmf3wPrWtA6coPfQDfFEY8AnYJwjalXCiosYRBIBZX8" crossorigin="anonymous">
+	</script>
+	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-alpha.5/js/bootstrap.min.js"
+		integrity="sha384-BLiI7JTZm+JWlgKa0M0kGRpJbF2J8q+qreVrKBC47e3K6BW78kGLrCkeRX6I9RoK" crossorigin="anonymous">
+	</script>
+	</body>
+	</html>
+
+#### wiki页面渲染 handler
+
+此 handler 处理 HTTP GET 请求以渲染维基页，如下所示：
+
+![page.png](images/page.png)
+
+这个页面还提供了一个按钮，用于在 Markdown 中编辑内容。我们只需在单击按钮时依靠 JavaScript 和 CSS 打开和关闭编辑器，而不是使用一个单独的 handler 和模板：
+
+![edit.png](images/edit.png)
+
+`pageRenderingHandler` 方法的代码如下:
+
+	private static final String EMPTY_PAGE_MARKDOWN =
+	  "# A new page\n" +
+	    "\n" +
+	    "Feel-free to write in Markdown!\n";
+	
+	private void pageRenderingHandler(RoutingContext context) {
+	  String page = context.request().getParam("page");   (1)
+	
+	  dbClient.getConnection(car -> {
+	    if (car.succeeded()) {
+	
+	      SQLConnection connection = car.result();
+	      connection.queryWithParams(SQL_GET_PAGE, new JsonArray().add(page), fetch -> {  (2)
+	        connection.close();
+	        if (fetch.succeeded()) {
+	
+	          JsonArray row = fetch.result().getResults()
+	            .stream()
+	            .findFirst()
+	            .orElseGet(() -> new JsonArray().add(-1).add(EMPTY_PAGE_MARKDOWN));
+	          Integer id = row.getInteger(0);
+	          String rawContent = row.getString(1);
+	
+	          context.put("title", page);
+	          context.put("id", id);
+	          context.put("newPage", fetch.result().getResults().size() == 0 ? "yes" : "no");
+	          context.put("rawContent", rawContent);
+	          context.put("content", Processor.process(rawContent));  (3)
+	          context.put("timestamp", new Date().toString());
+	
+	          templateEngine.render(context, "templates", "/page.ftl", ar -> {
+	            if (ar.succeeded()) {
+	              context.response().putHeader("Content-Type", "text/html");
+	              context.response().end(ar.result());
+	            } else {
+	              context.fail(ar.cause());
+	            }
+	          });
+	        } else {
+	          context.fail(fetch.cause());
+	        }
+	      });
+	
+	    } else {
+	      context.fail(car.cause());
+	    }
+	  });
+	}
+
+1. URL 参数（`/wiki/:page`）可以通过上下文的请求对象访问。
+2. 使用 JsonArray 将参数值传递给SQL查询语句，参数的顺序是 SQL 语句中`？`符号的顺序。
+3. `Processor`类来自我们使用的`txtmark`Markdown渲染库。
+
+#### wiki 页面创建 handler
+
+index 页面提供了一个区域用于创建新页面，其所在的 HTML 表单指向的URL由这个 handler 管理。这个 handler 的策略实际上并不是在数据库中创建新的条目，而仅仅是重定向到名称为 create 的 wiki 页面的 url。由于该 Wiki 页面不存在，`pageRenderingHandler`方法将在新页面使用默认的文本，最终，用户可以通过编辑然后保存该页面来创建该页面。
+
+handler 是`pageCreateHandler`方法，其实现是通过 HTTP 303 状态码重定向：
+
+	private void pageCreateHandler(RoutingContext context) {
+	  String pageName = context.request().getParam("name");
+	  String location = "/wiki/" + pageName;
+	  if (pageName == null || pageName.isEmpty()) {
+	    location = "/";
+	  }
+	  context.response().setStatusCode(303);
+	  context.response().putHeader("Location", location);
+	  context.response().end();
+	}
+
+#### 页面保存 handler
+
+`pageUpdateHandler`方法处理保存 Wiki 页面时的 HTTP POST 请求。更新现有页面（SQL`update`查询）或保存新页面（SQL`insert`查询）时都会发生这种情况：
+
+	private void pageUpdateHandler(RoutingContext context) {
+	  String id = context.request().getParam("id");   (1)
+	  String title = context.request().getParam("title");
+	  String markdown = context.request().getParam("markdown");
+	  boolean newPage = "yes".equals(context.request().getParam("newPage"));  (2)
+	
+	  dbClient.getConnection(car -> {
+	    if (car.succeeded()) {
+	      SQLConnection connection = car.result();
+	      String sql = newPage ? SQL_CREATE_PAGE : SQL_SAVE_PAGE;
+	      JsonArray params = new JsonArray();   (3)
+	      if (newPage) {
+	        params.add(title).add(markdown);
+	      } else {
+	        params.add(markdown).add(id);
+	      }
+	      connection.updateWithParams(sql, params, res -> {   (4)
+	        connection.close();
+	        if (res.succeeded()) {
+	          context.response().setStatusCode(303);    (5)
+	          context.response().putHeader("Location", "/wiki/" + title);
+	          context.response().end();
+	        } else {
+	          context.fail(res.cause());
+	        }
+	      });
+	    } else {
+	      context.fail(car.cause());
+	    }
+	  });
+	}
+
+1. 通过 HTTP POST 请求发送的表单参数可从`RoutingContext`对象获得。请注意，如果`Router`配置链中没有`BodyHandler`的话，这些值都将是不可用的，并且需要从 HTTP POST 请求负载中手动解码表单提交的负载。
+2. 我们通过 FreeMarker 模板`page.ftl`中隐藏的表单字段来判断我们是在更新现有页面还是保存新页面。
+3. 同样，使用带参数的 SQL 查询，并使用`JsonArray`传递值。
+4. `updateWithParams`方法用于`insert`\`update`\`delete`SQL 查询。
+5. 成功后，我们只需重定向到已经编辑的页面。
+
+#### 页面删除 hanlder
+
+`pageDeletionHandler`方法的实现非常简单：给定一个wiki词条标识，发出一个`delete`SQL 查询，然后重定向到wiki索引页(index.ftl)：
+
+	private void pageDeletionHandler(RoutingContext context) {
+	  String id = context.request().getParam("id");
+	  dbClient.getConnection(car -> {
+	    if (car.succeeded()) {
+	      SQLConnection connection = car.result();
+	      connection.updateWithParams(SQL_DELETE_PAGE, new JsonArray().add(id), res -> {
+	        connection.close();
+	        if (res.succeeded()) {
+	          context.response().setStatusCode(303);
+	          context.response().putHeader("Location", "/");
+	          context.response().end();
+	        } else {
+	          context.fail(res.cause());
+	        }
+	      });
+	    } else {
+	      context.fail(car.cause());
+	    }
+	  });
+	}
+
+### 运行应用
+
+到了这一步，我们已经有了一个可以运行的，独立的维基应用程序。
+
+要运行它，我们首先需要使用 Maven 构建它：
+
+`$ mvn clean package`
+
+由于构建生成了一个嵌入了所有必需依赖项的Jar（包括 Vert.x 和 JDBC 数据库），因此运行这个 wiki 非常简单：
+
+`$ java -jar target/wiki-step-1-1.3.0-SNAPSHOT-fat.jar`
+
+然后，您可以使用您喜欢的 Web 浏览器访问 [http://localhost:8080/](http://localhost:8080/) 开始享受使用这个 wiki 吧。
