@@ -6,31 +6,31 @@
 
 ## 引言
 
-本指南简要介绍了 Vert.x 的异步编程，主要针对熟悉主流非异步Web开发框架和库（例如 Java EE，Spring）的开发者。
+本指南简要介绍了使用 Vert.x 进行异步编程，主要针对熟悉主流非异步 Web 开发框架和库（例如 Java EE，Spring）的开发者。
 
 ### 关于本指南
 
 我们假设读者熟悉 Java 编程语言及其生态系统。
 
-我们将从一个由关系数据库和服务器端页面渲染支持的 wiki Web 应用程序开始；然后我们将通过几个步骤改进应用程序，直到它成为具有"实时"功能的现代单页面应用。在此过程中，您将学习：
+我们将从一个 wiki Web 应用开始，它由关系数据库和服务器端页面渲染支持；然后我们将通过几个步骤迭代应用程序，直到它成为具有"实时"功能的现代单页面应用。在此过程中，您将学习：
 
-1. 设计一个 Web 应用程序，通过模板在服务器端渲染页面，并使用关系数据库来持久化数据。
-2. 将每个技术组件清晰地隔离为可重用的事件处理单元，称之为 ***Verticle***。
-3. 提取 Vert.x 服务，以便于设计在同一JVM进程内或集群中的分布式节点之间无缝地相互通信的 Verticle。
+1. 设计一个 Web 应用，通过模板在服务器端渲染页面，并使用关系数据库来持久化数据。
+2. 将每个技术组件清晰地隔离为可复用的事件处理单元，称之为 ***Verticle***。
+3. 提取 Vert.x 服务，以便于设计可在同一JVM进程内或集群中的分布式节点之间无缝地相互通信的 Verticle。
 4. 使用异步操作测试代码。
 5. 与公开 Http/JSON web API 的第三方服务进行集成。
 6. 公开 Http/JSON web API
-7. 使用 HTTPS，Web 浏览器会话的用户身份验证和第三方客户端应用程序的JWT令牌保护和控制访问。
-8. 重构一些代码以使用流行的 RxJava 库与 Vert.x 集成进行响应式编程
-9. 使用 AngularJS 进行单页面应用程序的客户端编程。
-10. 通过 SockJS 集成的统一的 Vert.x 事件总线进行实时 Web 编程。
+7. 使用 HTTPS，Web 浏览器会话的用户身份验证和第三方客户端应用的JWT令牌来保护和控制访问。
+8. 重构一部分代码以使用流行的 RxJava 库和它的 Vert.x 集成进行响应式编程
+9. 使用 AngularJS 进行单页面应用的客户端编程。
+10. 使用基于 SockJS 集成的统一的 Vert.x 事件总线进行实时 Web 编程。
 
 **NOTE**
-> 本文档和代码示例的源码可从[https://github.com/vert-x3/vertx-guide-for-java-devs](https://github.com/vert-x3/vertx-guide-for-java-devs)获得。我们欢迎问题报告，反馈和pull请求！
+> 本文档和代码示例的源码可从[https://github.com/vert-x3/vertx-guide-for-java-devs](https://github.com/vert-x3/vertx-guide-for-java-devs)获得。我们欢迎问题报告，反馈和 pull-requests！
 
 ### 什么是 Vert.x?
 
-> Eclipse Vert.x 是一个用于在 JVM 上构建响应式应用程序的工具包。
+> Eclipse Vert.x 是一个构建基于 JVM 的响应式应用的工具包。
 > 
 > — Vert.x website
 
