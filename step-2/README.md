@@ -66,3 +66,33 @@
 2. `AbstractVerticle＃config()`方法允许访问已提供的 verticle 配置。第二个参数是在没有找到指定配置的值时的默认值。
 3. 配置的值不仅可以是`String`对象，还可以是整数，布尔值，复杂 JSON 数据等。
 
+这个类的其余部分主要是把 HTTP 部分的代码提取出来，之前的数据库代码被事件总线消息替换。这是`indexHandler`方法代码：
+
+	private final FreeMarkerTemplateEngine templateEngine = FreeMarkerTemplateEngine.create();
+	
+	private void indexHandler(RoutingContext context) {
+	
+	  DeliveryOptions options = new DeliveryOptions().addHeader("action", "all-pages"); (2)
+	
+	  vertx.eventBus().send(wikiDbQueue, new JsonObject(), options, reply -> {  (1)
+	    if (reply.succeeded()) {
+	      JsonObject body = (JsonObject) reply.result().body();   (3)
+	      context.put("title", "Wiki home");
+	      context.put("pages", body.getJsonArray("pages").getList());
+	      templateEngine.render(context, "templates", "/index.ftl", ar -> {
+	        if (ar.succeeded()) {
+	          context.response().putHeader("Content-Type", "text/html");
+	          context.response().end(ar.result());
+	        } else {
+	          context.fail(ar.cause());
+	        }
+	      });
+	    } else {
+	      context.fail(reply.cause());
+	    }
+	  });
+	}
+
+1. vertx对象提供对事件总线的访问，我们向数据库 verticle 的队列发送消息。
+2. Delivery options允许我们指定头部，负载编解码器和超时设置。
+3. 成功后，回复包含有效负载。
