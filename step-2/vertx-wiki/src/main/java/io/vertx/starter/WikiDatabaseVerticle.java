@@ -73,13 +73,13 @@ public class WikiDatabaseVerticle extends AbstractVerticle {
                 connection.execute(sqlQueries.get(SqlQuery.CREATE_PAGES_TABLE), create -> {
                     connection.close();
 
-                    if (create.succeeded()) {
+                    if (create.failed()) {
+                        LOGGER.error("Database preparation error", create.cause());
+                        startFuture.fail(create.cause());
+                    } else {
                         vertx.eventBus().consumer(config().getString(CONFIG_WIKIDB_QUEUE, "wikidb.queue"),
                             this::onMessage);
                         startFuture.complete();
-                    } else {
-                        LOGGER.error("Database preparation error", create.cause());
-                        startFuture.fail(create.cause());
                     }
                 });
             }
@@ -89,7 +89,7 @@ public class WikiDatabaseVerticle extends AbstractVerticle {
     private void loadSqlQueries() throws IOException {
         String queriesFile = config().getString(CONFIG_WIKIDB_SQL_QUERIES_RESOURCE_FILE);
         InputStream queriesInputStream;
-        if (queriesFile == null) {
+        if (queriesFile != null) {
             queriesInputStream = new FileInputStream(queriesFile);
         } else {
             queriesInputStream = getClass().getResourceAsStream("/db-queries.properties");
