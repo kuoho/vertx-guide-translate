@@ -572,7 +572,7 @@ handler 是`pageCreateHandler`方法，其实现是通过 HTTP 303 状态码重�
 4. `updateWithParams`方法用于`insert`\`update`\`delete`SQL 查询。
 5. 成功后，我们只需重定向到已经编辑的页面。
 
-#### 页面删除 hanlder
+#### 页面删除 handler
 
 `pageDeletionHandler`方法的实现非常简单：给定一个wiki词条标识，发出一个`delete`SQL 查询，然后重定向到wiki索引页(index.ftl)：
 
