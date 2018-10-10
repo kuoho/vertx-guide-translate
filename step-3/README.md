@@ -260,3 +260,191 @@ Vert.x 代码生成器创建代理类，并通过`VertxEBProxy`后缀来命名�
 	package io.vertx.guides.wiki.database;
 	
 	import io.vertx.codegen.annotations.ModuleGen;
+
+### 从数据库 verticle 公开数据库服务
+
+由于大多数数据库处理代码已移至`WikiDatabaseServiceImpl`，因此`WikiDatabaseVerticle`类现在包含两个方法：`start`方法注册服务，一个实用方法来加载SQL查询：
+
+	public class WikiDatabaseVerticle extends AbstractVerticle {
+	
+	  public static final String CONFIG_WIKIDB_JDBC_URL = "wikidb.jdbc.url";
+	  public static final String CONFIG_WIKIDB_JDBC_DRIVER_CLASS = "wikidb.jdbc.driver_class";
+	  public static final String CONFIG_WIKIDB_JDBC_MAX_POOL_SIZE = "wikidb.jdbc.max_pool_size";
+	  public static final String CONFIG_WIKIDB_SQL_QUERIES_RESOURCE_FILE = "wikidb.sqlqueries.resource.file";
+	  public static final String CONFIG_WIKIDB_QUEUE = "wikidb.queue";
+	
+	  @Override
+	  public void start(Future<Void> startFuture) throws Exception {
+	
+	    HashMap<SqlQuery, String> sqlQueries = loadSqlQueries();
+	
+	    JDBCClient dbClient = JDBCClient.createShared(vertx, new JsonObject()
+	      .put("url", config().getString(CONFIG_WIKIDB_JDBC_URL, "jdbc:hsqldb:file:db/wiki"))
+	      .put("driver_class", config().getString(CONFIG_WIKIDB_JDBC_DRIVER_CLASS, "org.hsqldb.jdbcDriver"))
+	      .put("max_pool_size", config().getInteger(CONFIG_WIKIDB_JDBC_MAX_POOL_SIZE, 30)));
+	
+	    WikiDatabaseService.create(dbClient, sqlQueries, ready -> {
+	      if (ready.succeeded()) {
+	        ServiceBinder binder = new ServiceBinder(vertx);
+	        binder
+	          .setAddress(CONFIG_WIKIDB_QUEUE)
+	          .register(WikiDatabaseService.class, ready.result()); (1)
+	        startFuture.complete();
+	      } else {
+	        startFuture.fail(ready.cause());
+	      }
+	    });
+	  }
+	
+	  /*
+	   * Note: this uses blocking APIs, but data is small...
+	   */
+	  private HashMap<SqlQuery, String> loadSqlQueries() throws IOException {
+	
+	    String queriesFile = config().getString(CONFIG_WIKIDB_SQL_QUERIES_RESOURCE_FILE);
+	    InputStream queriesInputStream;
+	    if (queriesFile != null) {
+	      queriesInputStream = new FileInputStream(queriesFile);
+	    } else {
+	      queriesInputStream = getClass().getResourceAsStream("/db-queries.properties");
+	    }
+	
+	    Properties queriesProps = new Properties();
+	    queriesProps.load(queriesInputStream);
+	    queriesInputStream.close();
+	
+	    HashMap<SqlQuery, String> sqlQueries = new HashMap<>();
+	    sqlQueries.put(SqlQuery.CREATE_PAGES_TABLE, queriesProps.getProperty("create-pages-table"));
+	    sqlQueries.put(SqlQuery.ALL_PAGES, queriesProps.getProperty("all-pages"));
+	    sqlQueries.put(SqlQuery.GET_PAGE, queriesProps.getProperty("get-page"));
+	    sqlQueries.put(SqlQuery.CREATE_PAGE, queriesProps.getProperty("create-page"));
+	    sqlQueries.put(SqlQuery.SAVE_PAGE, queriesProps.getProperty("save-page"));
+	    sqlQueries.put(SqlQuery.DELETE_PAGE, queriesProps.getProperty("delete-page"));
+	    return sqlQueries;
+	  }
+	}
+
+1. 我们在这里注册了服务
+
+注册服务需要接口类，Vert.x 上下文，服务实现和事件总线目标。
+
+`WikiDatabaseServiceVertxEBProxy`生成类处理在事件总线上接收的消息，然后将它们分发到`WikiDatabaseServiceImpl`。它的作用实际上非常接近我们在上一节中所做的：使用`action`头发送消息以指定要调用的方法，和 JSON 编码的参数。
+
+### 获取数据库服务代理
+
+重构为 Vert.x 服务的最后步骤是调整 HTTP 服务器 Verticle 以获取数据库服务的代理，并在handler中使用它而不是事件总线。
+
+首先，我们需要在 verticle 启动时创建代理：
+
+	private WikiDatabaseService dbService;
+	
+	@Override
+	public void start(Future<Void> startFuture) throws Exception {
+	
+	  String wikiDbQueue = config().getString(CONFIG_WIKIDB_QUEUE, "wikidb.queue"); (1)
+	  dbService = WikiDatabaseService.createProxy(vertx, wikiDbQueue);
+	
+	  HttpServer server = vertx.createHttpServer();
+	  // (...)
+
+1. 我们只需要确保使用和`WikiDatabaseVerticle`发布的服务相同的事件总线目的地。
+
+然后，我们需要通过调用数据库服务来替换对事件总线的调用：
+
+	private void indexHandler(RoutingContext context) {
+	  dbService.fetchAllPages(reply -> {
+	    if (reply.succeeded()) {
+	      context.put("title", "Wiki home");
+	      context.put("pages", reply.result().getList());
+	      templateEngine.render(context, "templates", "/index.ftl", ar -> {
+	        if (ar.succeeded()) {
+	          context.response().putHeader("Content-Type", "text/html");
+	          context.response().end(ar.result());
+	        } else {
+	          context.fail(ar.cause());
+	        }
+	      });
+	    } else {
+	      context.fail(reply.cause());
+	    }
+	  });
+	}
+	
+	private void pageRenderingHandler(RoutingContext context) {
+	  String requestedPage = context.request().getParam("page");
+	  dbService.fetchPage(requestedPage, reply -> {
+	    if (reply.succeeded()) {
+	
+	      JsonObject payLoad = reply.result();
+	      boolean found = payLoad.getBoolean("found");
+	      String rawContent = payLoad.getString("rawContent", EMPTY_PAGE_MARKDOWN);
+	      context.put("title", requestedPage);
+	      context.put("id", payLoad.getInteger("id", -1));
+	      context.put("newPage", found ? "no" : "yes");
+	      context.put("rawContent", rawContent);
+	      context.put("content", Processor.process(rawContent));
+	      context.put("timestamp", new Date().toString());
+	
+	      templateEngine.render(context, "templates", "/page.ftl", ar -> {
+	        if (ar.succeeded()) {
+	          context.response().putHeader("Content-Type", "text/html");
+	          context.response().end(ar.result());
+	        } else {
+	          context.fail(ar.cause());
+	        }
+	      });
+	
+	    } else {
+	      context.fail(reply.cause());
+	    }
+	  });
+	}
+	
+	private void pageUpdateHandler(RoutingContext context) {
+	  String title = context.request().getParam("title");
+	
+	  Handler<AsyncResult<Void>> handler = reply -> {
+	    if (reply.succeeded()) {
+	      context.response().setStatusCode(303);
+	      context.response().putHeader("Location", "/wiki/" + title);
+	      context.response().end();
+	    } else {
+	      context.fail(reply.cause());
+	    }
+	  };
+	
+	  String markdown = context.request().getParam("markdown");
+	  if ("yes".equals(context.request().getParam("newPage"))) {
+	    dbService.createPage(title, markdown, handler);
+	  } else {
+	    dbService.savePage(Integer.valueOf(context.request().getParam("id")), markdown, handler);
+	  }
+	}
+	
+	private void pageCreateHandler(RoutingContext context) {
+	  String pageName = context.request().getParam("name");
+	  String location = "/wiki/" + pageName;
+	  if (pageName == null || pageName.isEmpty()) {
+	    location = "/";
+	  }
+	  context.response().setStatusCode(303);
+	  context.response().putHeader("Location", location);
+	  context.response().end();
+	}
+	
+	private void pageDeletionHandler(RoutingContext context) {
+	  dbService.deletePage(Integer.valueOf(context.request().getParam("id")), reply -> {
+	    if (reply.succeeded()) {
+	      context.response().setStatusCode(303);
+	      context.response().putHeader("Location", "/");
+	      context.response().end();
+	    } else {
+	      context.fail(reply.cause());
+	    }
+	  });
+	}
+
+`WikiDatabaseServiceVertxProxyHandler`生成的类将作为事件总线消息转发调用。
+
+**TIP**
+>完全可以通过事件总线消息直接使用 Vert.x 服务，因为这是生成的代理所做的事情。
