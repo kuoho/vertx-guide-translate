@@ -1,8 +1,8 @@
-## Vert.x 编写的最小可用的 wiki
+## Vert.x 编写最小可用的 wiki
 
-我们将从第一次迭代，并以尽可能简单的代码开始，用 Vert.x 编写一个 wiki应用。下一次迭代将会引入更多优雅的代码以及适当的测试，我们将看到用Vert.x 进行快速原型设计是简单且实际的目标。
+我们将从第一次迭代，并以尽可能简单的代码开始，用 Vert.x 编写一个 wiki 应用。下一次迭代将会引入更多优雅的代码以及适当的测试，我们将看到用 Vert.x 进行快速原型设计是简单且实际的目标。
 
-在此阶段，wiki将使用服务器端渲染 HTML 页面并通过 JDBC 连接进行数据持久化。为此，我们将使用以下库。
+在此阶段，wiki 将使用服务器端渲染 HTML 页面并通过 JDBC 连接进行数据持久化。为此，我们将使用以下库。
 
 1. [Vert.x web](http://vertx.io/docs/vertx-web/java/ "Vert.x web") 虽然 Vert.x 核心库确实支持创建 HTTP 服务器，但它没有提供优雅的 API 来处理路由，和请求有效负载等。
 2. [Vert.x JDBC client](http://vertx.io/docs/vertx-jdbc-client/java/ "Vert.x JDBC client") 通过 JDBC 提供异步 API。
