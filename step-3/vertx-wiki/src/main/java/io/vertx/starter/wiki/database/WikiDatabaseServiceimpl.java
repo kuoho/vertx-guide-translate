@@ -62,6 +62,7 @@ public class WikiDatabaseServiceimpl implements WikiDatabaseService {
                     .collect(Collectors.toList());
                 handler.handle(Future.succeededFuture(new JsonArray(pages)));
             } else {
+                LOGGER.error("Database query error", fetch.cause());
                 handler.handle(Future.failedFuture(fetch.cause()));
             }
         });
