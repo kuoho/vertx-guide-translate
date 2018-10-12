@@ -3,7 +3,7 @@
 原文:[https://vertx.io/docs/guide-for-java-devs/](https://vertx.io/docs/guide-for-java-devs/) 
 github:[https://github.com/vert-x3/vertx-guide-for-java-devs](https://github.com/vert-x3/vertx-guide-for-java-devs)
 
-[引言](intro.md)</br>
+[引言](step-0)</br>
 [step-1 用 Vert.x 编写最小可运行 wiki 应用](step-1)</br>
 [step-2 重构为独立可复用的 Verticle](step-2)</br>
 [step-3 重构为 Vert.x 服务](step-3)</br>
