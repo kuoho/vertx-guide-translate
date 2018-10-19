@@ -8,10 +8,10 @@ github:[https://github.com/vert-x3/vertx-guide-for-java-devs](https://github.com
 [step-2 重构为独立可复用的 Verticle](step-2)</br>
 [step-3 重构为 Vert.x 服务](step-3)</br>
 [step-4 测试 Vert.x 代码](step-4)</br>
-[step-5 与第三方Web服务集成](step-5)</br>
-[step-6 公开Web API](step-6)</br>
+[step-5 与第三方 Web 服务集成](step-5)</br>
+[step-6 公开 Web API](step-6)</br>
 [step-7 安全和控制访问](step-7)</br>
-[step-8 使用RxJava进行反应式编程](step-8)</br>
-[step-9 使用AngularJS的客户端Web应用程序](step-9)</br>
+[step-8 使用 RxJava 进行反应式编程](step-8)</br>
+[step-9 使用 AngularJS 的客户端 Web 应用程序](step-9)</br>
 [step-10 通过事件总线使用跨界消息的实时 Web 功能](step-10)</br>
 [step-11 总结](step-10)</br>
