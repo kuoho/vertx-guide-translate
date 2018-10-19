@@ -24,7 +24,6 @@ public class WikiDatabaseServiceimpl implements WikiDatabaseService {
 
     private JDBCClient dbClient;
     private HashMap<SqlQuery, String> sqlQueries;
-    private Handler<AsyncResult<WikiDatabaseService>> readyHandler;
 
     public WikiDatabaseServiceimpl(JDBCClient dbClient, HashMap<SqlQuery, String> sqlQueries,
                                    Handler<AsyncResult<WikiDatabaseService>> readyHandler) {
@@ -128,6 +127,18 @@ public class WikiDatabaseServiceimpl implements WikiDatabaseService {
                 resultHandler.handle(Future.succeededFuture());
             } else {
                 LOGGER.error("Database query error", res.cause());
+                resultHandler.handle(Future.failedFuture(res.cause()));
+            }
+        });
+        return this;
+    }
+
+    @Override
+    public WikiDatabaseService fetchAllPagesData(Handler<AsyncResult<List<JsonObject>>> resultHandler) {
+        dbClient.query(sqlQueries.get(SqlQuery.ALL_PAGES_DATA), res -> {
+            if (res.succeeded()) {
+                resultHandler.handle(Future.succeededFuture(res.result().getRows()));
+            } else {
                 resultHandler.handle(Future.failedFuture(res.cause()));
             }
         });

@@ -7,9 +7,14 @@ import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.http.HttpServer;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
+import io.vertx.ext.web.client.HttpResponse;
+import io.vertx.ext.web.client.WebClient;
+import io.vertx.ext.web.client.WebClientOptions;
+import io.vertx.ext.web.codec.BodyCodec;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.templ.FreeMarkerTemplateEngine;
 import io.vertx.starter.wiki.database.WikiDatabaseService;
@@ -17,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Date;
+import java.util.List;
 
 /**
  * @author guohao
@@ -32,11 +38,17 @@ public class HttpServerVerticle extends AbstractVerticle {
 
     private WikiDatabaseService dbService;
 
+    private WebClient webClient;
+
     @Override
     public void start(Future<Void> startFuture) {
         wikiDbQueue = config().getString(CONFIG_WIKIDB_QUEUE, "wikidb.queue");
 
         dbService = WikiDatabaseService.createProxy(vertx, wikiDbQueue);
+
+        webClient = WebClient.create(vertx, new WebClientOptions()
+            .setSsl(true)
+            .setUserAgent("vert-x3"));
 
         HttpServer httpServer = vertx.createHttpServer();
 
@@ -47,7 +59,7 @@ public class HttpServerVerticle extends AbstractVerticle {
         router.post("/save").handler(this::pageUpdateHandler);
         router.post("/create").handler(this::pageCreateHandler);
         router.post("/delete").handler(this::pageDeletionHandler);
-
+        router.get("/backup").handler(this::backupHandler);
         int portNum = config().getInteger(CONFIG_HTTP_SERVER_PORT, 8082);
 
         httpServer.requestHandler(router::accept).listen(portNum, ar -> {
@@ -57,6 +69,58 @@ public class HttpServerVerticle extends AbstractVerticle {
             } else {
                 LOGGER.error("Could not start a HTTP server", ar.cause());
                 startFuture.fail(ar.cause());
+            }
+        });
+    }
+
+    private void backupHandler(RoutingContext context) {
+        dbService.fetchAllPagesData(reply -> {
+            if (reply.succeeded()) {
+
+
+                JsonArray filesObj = new JsonArray();
+                reply.result().forEach(page -> {
+                    JsonObject fileObj = new JsonObject();
+                    fileObj.put("name", page.getString("NAME"));
+                    fileObj.put("content", page.getString("CONTENT"));
+                    filesObj.add(fileObj);
+                });
+
+                JsonObject payLoad = new JsonObject()
+                    .put("files", filesObj)
+                    .put("language", "plaintext")
+                    .put("title", "vertx-wiki-backup")
+                    .put("public", true);
+
+                webClient.post(443, "snippets.glot.io", "/snippets")
+                    .putHeader("Content-Type", "application/json")
+                    .as(BodyCodec.jsonObject()) //
+                    .sendJsonObject(payLoad, ar -> {
+                        if (ar.succeeded()) {
+                            HttpResponse<JsonObject> response = ar.result();
+                            if (response.statusCode() == 200) {
+                                String url = "https://glot.io/snippets/" + response.body().getString("id");
+                                context.put("backup_gist_url", url);  // <6>
+                                indexHandler(context);
+                            } else {
+                                StringBuilder message = new StringBuilder()
+                                    .append("Could not backup the wiki: ")
+                                    .append(response.statusMessage());
+                                JsonObject body = response.body();
+                                if (body != null) {
+                                    message.append(System.getProperty("line.separator"))
+                                        .append(body.encodePrettily());
+                                }
+                                LOGGER.error(message.toString());
+                                context.fail(502);
+                            }
+                        } else {
+                            context.fail(ar.cause());
+                        }
+                    });
+
+            } else {
+                context.fail(reply.cause());
             }
         });
     }
