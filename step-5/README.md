@@ -167,6 +167,6 @@ Web 客户端 API 提供了更简单的门面，特别是简化有效负载数�
 1. 代码段创建请求的有效内容是[服务 API 文档](https://github.com/prasmussen/glot-snippets/blob/master/api_docs/create_snippet.md)中概述的 JSON 文档。
 2. 每个文件都是负载中`file`对象下的一个条目，带有标题和内容。
 3. web 客户端需要在端口 443（HTTPS）上发出`POST`请求，路径必须是`/snippets`。
-4. `BodyCodec`类提供了帮助，用于指定将响应将直接转换为 Vert.x `JsonObject`实例。也可以使用`BodyCodec#json（Class <T>）`，JSON 数据将映射W为类型为`T`的 Java 对象（这使用了 Jackson 数据映射）。
+4. `BodyCodec`类提供了帮助，用于指定将响应将直接转换为 Vert.x `JsonObject`实例。也可以使用`BodyCodec#json(Class <T>)`，JSON 数据将映射W为类型为`T`的 Java 对象（这使用了 Jackson 数据映射）。
 5. `sendJsonObject`用来帮助触发带有 JSON 负载的 HTTP 请求。
 6. 成功后，我们可以获取片段标识符(identifier)，并构建一个用户友好的 Web 表现的URL。
