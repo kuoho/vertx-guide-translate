@@ -1,7 +1,10 @@
 package io.vertx.starter.wiki.database;
 
+
 import io.vertx.codegen.annotations.Fluent;
+import io.vertx.codegen.annotations.GenIgnore;
 import io.vertx.codegen.annotations.ProxyGen;
+import io.vertx.codegen.annotations.VertxGen;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
@@ -17,6 +20,7 @@ import java.util.List;
  * @date 2018-10-10 14:04
  */
 @ProxyGen
+@VertxGen
 public interface WikiDatabaseService {
 
     @Fluent
@@ -37,10 +41,12 @@ public interface WikiDatabaseService {
     @Fluent
     WikiDatabaseService fetchAllPagesData(Handler<AsyncResult<List<JsonObject>>> resultHandler);
 
+    @GenIgnore
     static WikiDatabaseService create(JDBCClient dbClient, HashMap<SqlQuery, String> sqlQueries, Handler<AsyncResult<WikiDatabaseService>> readyHandler) {
         return new WikiDatabaseServiceimpl(dbClient, sqlQueries, readyHandler);
     }
 
+    @GenIgnore
     static WikiDatabaseService createProxy(Vertx vertx, String address) {
         return new WikiDatabaseServiceVertxEBProxy(vertx, address);
     }

@@ -1,28 +1,28 @@
 package io.vertx.starter.wiki.http;
 
+
 import com.github.rjeschke.txtmark.Processor;
-import io.vertx.core.AbstractVerticle;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.eventbus.DeliveryOptions;
-import io.vertx.core.http.HttpServer;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
-import io.vertx.ext.web.Router;
-import io.vertx.ext.web.RoutingContext;
-import io.vertx.ext.web.client.HttpResponse;
-import io.vertx.ext.web.client.WebClient;
 import io.vertx.ext.web.client.WebClientOptions;
-import io.vertx.ext.web.codec.BodyCodec;
-import io.vertx.ext.web.handler.BodyHandler;
-import io.vertx.ext.web.templ.FreeMarkerTemplateEngine;
+import io.vertx.reactivex.core.AbstractVerticle;
+import io.vertx.reactivex.core.http.HttpServer;
+import io.vertx.reactivex.ext.web.Router;
+import io.vertx.reactivex.ext.web.RoutingContext;
+import io.vertx.reactivex.ext.web.client.HttpResponse;
+import io.vertx.reactivex.ext.web.client.WebClient;
+import io.vertx.reactivex.ext.web.codec.BodyCodec;
+import io.vertx.reactivex.ext.web.handler.BodyHandler;
+import io.vertx.reactivex.ext.web.templ.FreeMarkerTemplateEngine;
 import io.vertx.starter.wiki.database.WikiDatabaseService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Date;
-import java.util.List;
 
 /**
  * @author guohao
@@ -40,11 +40,12 @@ public class HttpServerVerticle extends AbstractVerticle {
 
     private WebClient webClient;
 
+
     @Override
     public void start(Future<Void> startFuture) {
         wikiDbQueue = config().getString(CONFIG_WIKIDB_QUEUE, "wikidb.queue");
 
-        dbService = WikiDatabaseService.createProxy(vertx, wikiDbQueue);
+        dbService = WikiDatabaseService.createProxy(vertx.getDelegate(), wikiDbQueue);
 
         webClient = WebClient.create(vertx, new WebClientOptions()
             .setSsl(true)
@@ -76,8 +77,6 @@ public class HttpServerVerticle extends AbstractVerticle {
     private void backupHandler(RoutingContext context) {
         dbService.fetchAllPagesData(reply -> {
             if (reply.succeeded()) {
-
-
                 JsonArray filesObj = new JsonArray();
                 reply.result().forEach(page -> {
                     JsonObject fileObj = new JsonObject();
